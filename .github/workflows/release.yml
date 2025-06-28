@@ -52,9 +52,9 @@ jobs:
       - name: Build for multiple platforms
         run: |
           mkdir -p dist
-          GOOS=linux GOARCH=amd64 go build -o dist/ekspeek-linux-amd64 ./bin/ekspeek
-          GOOS=darwin GOARCH=amd64 go build -o dist/ekspeek-darwin-amd64 ./bin/ekspeek
-          GOOS=darwin GOARCH=arm64 go build -o dist/ekspeek-darwin-arm64 ./bin/ekspeek
+          GOOS=linux GOARCH=amd64 go build -o dist/ekspeek-linux-amd64 ./pkg/cmd
+          GOOS=darwin GOARCH=amd64 go build -o dist/ekspeek-darwin-amd64 ./pkg/cmd
+          GOOS=darwin GOARCH=arm64 go build -o dist/ekspeek-darwin-arm64 ./pkg/cmd
           chmod +x dist/*
 
       - name: Create Release
