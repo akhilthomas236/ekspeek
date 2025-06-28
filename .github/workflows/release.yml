@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '>=1.19.0'
+          
+      - name: Run tests
+        run: go test ./...
+
+  release:
+    name: Create Release
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '>=1.19.0'
+
+      - name: Get latest tag
+        id: get_latest_tag
+        run: |
+          git fetch --tags
+          latest_tag=$(git tag --sort=-v:refname | head -n 1)
+          if [ -z "$latest_tag" ]; then
+            echo "No tags found, starting with v0.1.0"
+            echo "latest_tag=v0.1.0" >> $GITHUB_OUTPUT
+          else
+            echo "Latest tag: $latest_tag"
+            echo "latest_tag=$latest_tag" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Bump version
+        id: bump_version
+        run: |
+          latest_tag=${{ steps.get_latest_tag.outputs.latest_tag }}
+          major=$(echo $latest_tag | cut -d. -f1)
+          minor=$(echo $latest_tag | cut -d. -f2)
+          patch=$(echo $latest_tag | cut -d. -f3)
+          new_patch=$((patch + 1))
+          new_tag="${major}.${minor}.${new_patch}"
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+      - name: Build for multiple platforms
+        run: |
+          mkdir -p dist
+          GOOS=linux GOARCH=amd64 go build -o dist/ekspeek-linux-amd64 ./cmd/ekspeek
+          GOOS=darwin GOARCH=amd64 go build -o dist/ekspeek-darwin-amd64 ./cmd/ekspeek
+          GOOS=darwin GOARCH=arm64 go build -o dist/ekspeek-darwin-arm64 ./cmd/ekspeek
+          chmod +x dist/*
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.bump_version.outputs.new_tag }}
+          release_name: Release ${{ steps.bump_version.outputs.new_tag }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Linux AMD64 Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/ekspeek-linux-amd64
+          asset_name: ekspeek-linux-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS AMD64 Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/ekspeek-darwin-amd64
+          asset_name: ekspeek-darwin-amd64
+          asset_content_type: application/octet-stream
+
+      - name: Upload macOS ARM64 Binary
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./dist/ekspeek-darwin-arm64
+          asset_name: ekspeek-darwin-arm64
+          asset_content_type: application/octet-stream

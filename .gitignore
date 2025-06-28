@@ -1,0 +1,19 @@
+# Binary
+bin/
+ekspeek
+
+# IDE files
+.idea/
+.vscode/
+
+# macOS files
+.DS_Store
+
+# Go files
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
