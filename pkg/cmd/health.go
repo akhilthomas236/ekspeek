@@ -46,7 +46,7 @@ func newHealthCheckCommand() *cobra.Command {
 			}
 
 			// Create kubernetes client
-			kubeClient, err := k8s.NewKubeClient()
+			kubeClient, err := getKubeClient(clusterName)
 			if err != nil {
 				return err
 			}

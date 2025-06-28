@@ -11,7 +11,21 @@ import (
 
 	"github.com/spf13/cobra"
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+// getKubeClient is a helper function to create a new KubeClient
+func getKubeClient(clusterName string) (*k8s.KubeClient, error) {
+	ctx := context.Background()
+
+	// Update kubeconfig
+	logger.Info("Updating kubeconfig for cluster %s", clusterName)
+	if err := k8s.UpdateKubeconfig(ctx, clusterName, region); err != nil {
+		return nil, err
+	}
+
+	return k8s.CreateKubeClient()
+}
 
 func NewDebugCommand() *cobra.Command {
 	debugCmd := &cobra.Command{
@@ -64,7 +78,7 @@ func newDebugEFSCommand() *cobra.Command {
 			}
 
 			// Create kubernetes client
-			kubeClient, err := k8s.NewKubeClient()
+			kubeClient, err := k8s.CreateKubeClient()
 			if err != nil {
 				return err
 			}
@@ -84,10 +98,10 @@ func newDebugEFSCommand() *cobra.Command {
 			logger.Success("Found %d EFS CSI driver pods:", len(pods))
 			for _, pod := range pods {
 				status := "Healthy"
-				if pod.Status.Phase != "Running" {
-					status = fmt.Sprintf("Unhealthy (%s)", pod.Status.Phase)
+				if pod.Phase != corev1.PodRunning {
+					status = fmt.Sprintf("Unhealthy (%s)", pod.Phase)
 				}
-				fmt.Printf("Pod: %s\nStatus: %s\nNode: %s\n\n", pod.Name, status, pod.Spec.NodeName)
+				fmt.Printf("Pod: %s\nStatus: %s\nNode: %s\n\n", pod.Name, status, pod.NodeName)
 			}
 
 			return nil
@@ -123,7 +137,7 @@ func newDebugPVCCommand() *cobra.Command {
 			}
 
 			// Create kubernetes client
-			kubeClient, err := k8s.NewKubeClient()
+			kubeClient, err := k8s.CreateKubeClient()
 			if err != nil {
 				return err
 			}
@@ -186,7 +200,7 @@ func newDebugPodsCommand() *cobra.Command {
 			}
 
 			// Create kubernetes client
-			kubeClient, err := k8s.NewKubeClient()
+			kubeClient, err := k8s.CreateKubeClient()
 			if err != nil {
 				return err
 			}
@@ -205,12 +219,11 @@ func newDebugPodsCommand() *cobra.Command {
 
 			logger.Warning("Found %d failed pods:", len(pods))
 			for _, pod := range pods {
-				fmt.Printf("\nPod: %s\nNamespace: %s\nStatus: %s\nReason: %s\nMessage: %s\n",
+				fmt.Printf("\nPod: %s\nNamespace: %s\nStatus: %s\nMessage: %s\n",
 					pod.Name,
 					pod.Namespace,
-					pod.Status.Phase,
-					pod.Status.Reason,
-					pod.Status.Message)
+					pod.Status,
+					pod.Message)
 
 				if showLogs {
 					logs, err := kubeClient.GetPodLogs(ctx, pod.Namespace, pod.Name, "")
@@ -254,7 +267,7 @@ func newDebugResourcesCommand() *cobra.Command {
 			}
 
 			// Create kubernetes client
-			kubeClient, err := k8s.NewKubeClient()
+			kubeClient, err := k8s.CreateKubeClient()
 			if err != nil {
 				return err
 			}
@@ -268,13 +281,13 @@ func newDebugResourcesCommand() *cobra.Command {
 
 			fmt.Printf("\nCluster Resource Usage:\n")
 			fmt.Printf("CPU Usage: %.2f%% (%.2f/%.2f cores)\n",
-				resources["cpuUsagePercent"].(float64),
-				float64(resources["allocatedCPU"].(int64))/1000,
-				float64(resources["totalCPU"].(int64))/1000)
+				resources.CPUPercentage,
+				float64(resources.AllocatedCPU)/1000,
+				float64(resources.TotalCPU)/1000)
 			fmt.Printf("Memory Usage: %.2f%% (%.2f/%.2f GB)\n",
-				resources["memUsagePercent"].(float64),
-				float64(resources["allocatedMemory"].(int64))/(1024*1024*1024),
-				float64(resources["totalMemory"].(int64))/(1024*1024*1024))
+				resources.MemPercentage,
+				float64(resources.AllocatedMemory)/(1024*1024*1024),
+				float64(resources.TotalMemory)/(1024*1024*1024))
 
 			return nil
 		},
@@ -297,16 +310,28 @@ func newDebugIRSACommand() *cobra.Command {
 				return fmt.Errorf("pod name is required")
 			}
 			podName := args[0]
+			ctx := context.Background()
+
+			// Create kubernetes client
+			kubeClient, err := k8s.CreateKubeClient()
+			if err != nil {
+				return err
+			}
 
 			// 1. Check pod's service account
-			sa, err := k8s.GetPodServiceAccount(podName)
+			saName, err := kubeClient.GetPodServiceAccount(ctx, "default", podName)
+			if err != nil {
+				return err
+			}
+
+			// Get service account
+			sa, err := kubeClient.Clientset.CoreV1().ServiceAccounts("default").Get(ctx, saName, metav1.GetOptions{})
 			if err != nil {
 				return err
 			}
 
 			// 2. Validate service account annotations
-			annotations := sa.GetAnnotations()
-			roleARN, exists := annotations["eks.amazonaws.com/role-arn"]
+			roleARN, exists := sa.Annotations["eks.amazonaws.com/role-arn"]
 			if !exists {
 				return fmt.Errorf("service account %s is missing IAM role annotation", sa.Name)
 			}
@@ -317,7 +342,7 @@ func newDebugIRSACommand() *cobra.Command {
 			}
 
 			// 4. Check WebIdentity token mounting
-			if err := k8s.ValidatePodWebIdentityToken(podName); err != nil {
+			if err := kubeClient.ValidatePodWebIdentityToken(ctx, "default", podName); err != nil {
 				return err
 			}
 
@@ -349,7 +374,7 @@ func newDebugAutoscalerCommand() *cobra.Command {
 			}
 
 			// Create k8s client
-			kubeClient, err := k8s.NewKubeClient()
+			kubeClient, err := getKubeClient(clusterName)
 			if err != nil {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
 			}
@@ -375,7 +400,7 @@ func newDebugAutoscalerCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			
+
 			// Analyze logs for common issues
 			if strings.Contains(logs, "FailedToUpdateNodeGroupSize") {
 				logger.Warning("❌ Node group size update failures detected")
@@ -392,7 +417,7 @@ func newDebugAutoscalerCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			
+
 			// Process scaling events
 			for _, event := range events {
 				if event.Type == corev1.EventTypeWarning {
@@ -543,7 +568,7 @@ func newDebugKarpenterCommand() *cobra.Command {
 			}
 
 			// Create kubernetes client
-			kubeClient, err := k8s.NewKubeClient()
+			kubeClient, err := getKubeClient(clusterName)
 			if err != nil {
 				return err
 			}

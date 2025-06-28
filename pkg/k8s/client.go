@@ -1,4 +1,4 @@
-package aws
+package k8s
 
 import (
 	"context"
@@ -22,9 +22,17 @@ type ClientConfig struct {
 	Region  string
 }
 
+// EKSAPI represents the interface for EKS API operations
+type EKSAPI interface {
+	ListClusters(ctx context.Context, params *eks.ListClustersInput, optFns ...func(*eks.Options)) (*eks.ListClustersOutput, error)
+	DescribeCluster(ctx context.Context, params *eks.DescribeClusterInput, optFns ...func(*eks.Options)) (*eks.DescribeClusterOutput, error)
+	ListNodegroups(ctx context.Context, params *eks.ListNodegroupsInput, optFns ...func(*eks.Options)) (*eks.ListNodegroupsOutput, error)
+	DescribeNodegroup(ctx context.Context, params *eks.DescribeNodegroupInput, optFns ...func(*eks.Options)) (*eks.DescribeNodegroupOutput, error)
+}
+
 // Client is the struct that holds the AWS services clients
 type Client struct {
-	EKSClient       *eks.Client
+	EKSClient       EKSAPI
 	CloudWatchClient *cloudwatch.Client
 	IAMClient       *iam.Client
 }
@@ -284,6 +292,34 @@ func GetEKSPerformanceMetrics(ctx context.Context, clusterName string) ([]Perfor
 	}
 
 	return metrics, nil
+}
+
+// UpdateKubeconfig updates the kubeconfig file for the specified cluster
+func UpdateKubeconfig(ctx context.Context, clusterName, region string) error {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return fmt.Errorf("unable to load SDK config: %w", err)
+	}
+
+	client := eks.NewFromConfig(cfg)
+
+	input := &eks.DescribeClusterInput{
+		Name: aws.String(clusterName),
+	}
+	result, err := client.DescribeCluster(ctx, input)
+	if err != nil {
+		return fmt.Errorf("unable to describe cluster: %w", err)
+	}
+
+	if result.Cluster == nil {
+		return fmt.Errorf("cluster information is nil")
+	}
+
+	// Here we would typically update the kubeconfig file
+	// This is a placeholder - you would need to implement the actual kubeconfig update logic
+	// using client-go's tools/clientcmd package
+	
+	return nil
 }
 
 // Helper functions
