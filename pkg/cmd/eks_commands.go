@@ -32,6 +32,7 @@ describing their configuration, and managing their components.`,
 		NewDescribeClusterCmd(),
 		NewListNodegroupsCmd(),
 		NewDescribeNodegroupCmd(),
+		NewDebugCommand(),
 	)
 
 	return cmd
