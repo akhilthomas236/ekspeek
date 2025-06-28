@@ -11,6 +11,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// NewEKSCommand creates the root command and all its subcommands
+func NewEKSCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "ekspeek",
+		Short: "A tool for inspecting and managing EKS clusters",
+		Long: `ekspeek is a command-line tool that helps you inspect and manage
+your Amazon EKS clusters. It provides commands for listing clusters,
+describing their configuration, and managing their components.`,
+	}
+
+	// Add global flags
+	cmd.PersistentFlags().StringVar(&profile, "profile", "", "AWS profile to use")
+	cmd.PersistentFlags().StringVar(&region, "region", "", "AWS region to use")
+	cmd.PersistentFlags().BoolVar(&debug, "debug", false, "Enable debug logging")
+
+	// Add all subcommands
+	cmd.AddCommand(
+		NewListClustersCmd(),
+		NewDescribeClusterCmd(),
+		NewListNodegroupsCmd(),
+		NewDescribeNodegroupCmd(),
+	)
+
+	return cmd
+}
+
 // NewListClustersCmd creates a command to list EKS clusters
 func NewListClustersCmd() *cobra.Command {
 	return newListClustersCmd()
