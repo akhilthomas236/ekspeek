@@ -164,12 +164,6 @@ func newDebugEFSCommand() *cobra.Command {
 
 			ctx := context.Background()
 
-			// Update kubeconfig
-			logger.Info("Updating kubeconfig for cluster %s", clusterName)
-			if err := k8s.UpdateKubeconfig(ctx, clusterName, region); err != nil {
-				return err
-			}
-
 			// Create kubernetes client
 			kubeClient, err := getKubeClient()
 			if err != nil {
@@ -222,12 +216,6 @@ func newDebugPVCCommand() *cobra.Command {
 			}
 
 			ctx := context.Background()
-
-			// Update kubeconfig
-			logger.Info("Updating kubeconfig for cluster %s", clusterName)
-			if err := k8s.UpdateKubeconfig(ctx, clusterName, region); err != nil {
-				return err
-			}
 
 			// Create kubernetes client
 			kubeClient, err := getKubeClient()
@@ -285,12 +273,6 @@ func newDebugPodsCommand() *cobra.Command {
 			}
 
 			ctx := context.Background()
-
-			// Update kubeconfig
-			logger.Info("Updating kubeconfig for cluster %s", clusterName)
-			if err := k8s.UpdateKubeconfig(ctx, clusterName, region); err != nil {
-				return err
-			}
 
 			// Create kubernetes client
 			kubeClient, err := getKubeClient()
@@ -352,12 +334,6 @@ func newDebugResourcesCommand() *cobra.Command {
 			}
 
 			ctx := context.Background()
-
-			// Update kubeconfig
-			logger.Info("Updating kubeconfig for cluster %s", clusterName)
-			if err := k8s.UpdateKubeconfig(ctx, clusterName, region); err != nil {
-				return err
-			}
 
 			// Create kubernetes client
 			kubeClient, err := getKubeClient()
@@ -1172,12 +1148,6 @@ func newDebugKarpenterCommand() *cobra.Command {
 			}
 
 			ctx := context.Background()
-
-			// Update kubeconfig
-			logger.Info("Updating kubeconfig for cluster %s", clusterName)
-			if err := k8s.UpdateKubeconfig(ctx, clusterName, region); err != nil {
-				return err
-			}
 
 			// Create kubernetes client
 			kubeClient, err := getKubeClient()
