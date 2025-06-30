@@ -58,9 +58,10 @@ type ClusterHealthStatus struct {
 }
 
 type LoggingStatus struct {
-	FluentBitStatus    []PodStatus
-	CloudWatchStatus   []PodStatus
+	FluentBitStatus     []PodStatus
+	CloudWatchStatus    []PodStatus
 	MetricsServerStatus []PodStatus
+	DynatraceStatus    []PodStatus // Status of Dynatrace OneAgent pods
 }
 
 type NetworkingStatus struct {
@@ -307,6 +308,23 @@ func (k *KubeClient) checkLoggingStatus(ctx context.Context, status *ClusterHeal
 
 	for _, pod := range metricsPods.Items {
 		status.LoggingStatus.MetricsServerStatus = append(status.LoggingStatus.MetricsServerStatus, PodStatus{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+			Status:    string(pod.Status.Phase),
+			Message:   pod.Status.Message,
+		})
+	}
+
+	// Check Dynatrace OneAgent status
+	dynatraceAgents, err := k.Clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=dynatrace-oneagent",
+	})
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	for _, pod := range dynatraceAgents.Items {
+		status.LoggingStatus.DynatraceStatus = append(status.LoggingStatus.DynatraceStatus, PodStatus{
 			Name:      pod.Name,
 			Namespace: pod.Namespace,
 			Status:    string(pod.Status.Phase),

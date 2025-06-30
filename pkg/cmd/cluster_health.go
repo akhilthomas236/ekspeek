@@ -339,6 +339,65 @@ func printSecurityStatus(status *k8s.ClusterHealthStatus) {
 	}
 }
 
+// Print logging and monitoring status
+func printLoggingStatus(status k8s.LoggingStatus) {
+	// FluentBit Status
+	if len(status.FluentBitStatus) > 0 {
+		fmt.Println("\nFluentBit Status:")
+		for _, pod := range status.FluentBitStatus {
+			if pod.Status != "Running" {
+				logger.Warning("❌ FluentBit pod %s is %s: %s", pod.Name, pod.Status, pod.Message)
+			} else {
+				logger.Success("✅ FluentBit pod %s is running", pod.Name)
+			}
+		}
+	} else {
+		logger.Warning("⚠️ FluentBit not detected in cluster")
+	}
+
+	// CloudWatch Status
+	if len(status.CloudWatchStatus) > 0 {
+		fmt.Println("\nCloudWatch Agent Status:")
+		for _, pod := range status.CloudWatchStatus {
+			if pod.Status != "Running" {
+				logger.Warning("❌ CloudWatch pod %s is %s: %s", pod.Name, pod.Status, pod.Message)
+			} else {
+				logger.Success("✅ CloudWatch pod %s is running", pod.Name)
+			}
+		}
+	} else {
+		logger.Warning("⚠️ CloudWatch Agent not detected in cluster")
+	}
+
+	// Metrics Server Status
+	if len(status.MetricsServerStatus) > 0 {
+		fmt.Println("\nMetrics Server Status:")
+		for _, pod := range status.MetricsServerStatus {
+			if pod.Status != "Running" {
+				logger.Warning("❌ Metrics Server pod %s is %s: %s", pod.Name, pod.Status, pod.Message)
+			} else {
+				logger.Success("✅ Metrics Server pod %s is running", pod.Name)
+			}
+		}
+	} else {
+		logger.Warning("⚠️ Metrics Server not detected in cluster")
+	}
+
+	// Dynatrace Status
+	if len(status.DynatraceStatus) > 0 {
+		fmt.Println("\nDynatrace OneAgent Status:")
+		for _, pod := range status.DynatraceStatus {
+			if pod.Status != "Running" {
+				logger.Warning("❌ Dynatrace OneAgent pod %s is %s: %s", pod.Name, pod.Status, pod.Message)
+			} else {
+				logger.Success("✅ Dynatrace OneAgent pod %s is running", pod.Name)
+			}
+		}
+	} else {
+		logger.Warning("⚠️ Dynatrace OneAgent not detected in cluster")
+	}
+}
+
 func printResourceUtilization(status *k8s.ClusterHealthStatus) {
 	fmt.Printf("\nCluster Resource Usage by Node:\n")
 
