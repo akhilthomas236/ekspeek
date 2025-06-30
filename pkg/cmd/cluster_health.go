@@ -96,13 +96,7 @@ func newClusterHealthCommand() *cobra.Command {
 				defer cancel()
 			}
 
-			// Update kubeconfig
-			logger.Info("Updating kubeconfig for cluster %s", clusterName)
-			if err := k8s.UpdateKubeconfig(ctx, clusterName, region); err != nil {
-				return err
-			}
-
-			// Create kubernetes client
+			// Create kubernetes client using default kubeconfig or KUBECONFIG env var
 			kubeClient, err := getKubeClient()
 			if err != nil {
 				return fmt.Errorf("failed to create kubernetes client: %w", err)
