@@ -51,6 +51,10 @@ type ClusterHealthStatus struct {
 	SchedulingStatus   SchedulingStatus
 	AuthStatus         AuthStatus
 	NodeStatus         NodeStatus
+	StatefulSetStatus  []StatefulSetStatus
+	DaemonSetStatus    []DaemonSetStatus
+	PVCStatus          []*PVCStatus
+	StorageClasses     []StorageClass
 }
 
 type LoggingStatus struct {
@@ -139,6 +143,29 @@ type PVCStatus struct {
 	Spec      corev1.PersistentVolumeClaimSpec
 }
 
+// StatefulSetStatus represents the status of a StatefulSet
+type StatefulSetStatus struct {
+	Name            string
+	Namespace       string
+	ReadyReplicas   int32
+	DesiredReplicas int32
+}
+
+// DaemonSetStatus represents the status of a DaemonSet
+type DaemonSetStatus struct {
+	Name              string
+	Namespace         string
+	NumberUnavailable int32
+	NumberReady       int32
+}
+
+// StorageClass represents a Kubernetes StorageClass
+type StorageClass struct {
+	Name         string
+	Provisioner  string
+	DefaultClass bool
+}
+
 // CheckClusterHealth performs comprehensive health checks
 func (k *KubeClient) CheckClusterHealth(ctx context.Context) (*ClusterHealthStatus, error) {
 	status := &ClusterHealthStatus{
@@ -182,6 +209,21 @@ func (k *KubeClient) CheckClusterHealth(ctx context.Context) (*ClusterHealthStat
 
 	// Check node health
 	if err := k.checkNodeStatus(ctx, &status.NodeStatus); err != nil {
+		return nil, err
+	}
+
+	// Check StatefulSets
+	if err := k.checkStatefulSetStatus(ctx, status); err != nil {
+		return nil, err
+	}
+
+	// Check DaemonSets
+	if err := k.checkDaemonSetStatus(ctx, status); err != nil {
+		return nil, err
+	}
+
+	// Check Storage
+	if err := k.checkStorageStatus(ctx, status); err != nil {
 		return nil, err
 	}
 
@@ -441,6 +483,79 @@ func (k *KubeClient) checkNodeStatus(ctx context.Context, status *NodeStatus) er
 				}
 			}
 		}
+	}
+
+	return nil
+}
+
+func (k *KubeClient) checkStatefulSetStatus(ctx context.Context, status *ClusterHealthStatus) error {
+	stsList, err := k.Clientset.AppsV1().StatefulSets("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, sts := range stsList.Items {
+		status.StatefulSetStatus = append(status.StatefulSetStatus, StatefulSetStatus{
+			Name:            sts.Name,
+			Namespace:       sts.Namespace,
+			ReadyReplicas:   sts.Status.ReadyReplicas,
+			DesiredReplicas: *sts.Spec.Replicas,
+		})
+	}
+
+	return nil
+}
+
+func (k *KubeClient) checkDaemonSetStatus(ctx context.Context, status *ClusterHealthStatus) error {
+	dsList, err := k.Clientset.AppsV1().DaemonSets("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, ds := range dsList.Items {
+		status.DaemonSetStatus = append(status.DaemonSetStatus, DaemonSetStatus{
+			Name:              ds.Name,
+			Namespace:         ds.Namespace,
+			NumberUnavailable: ds.Status.NumberUnavailable,
+			NumberReady:       ds.Status.NumberReady,
+		})
+	}
+
+	return nil
+}
+
+func (k *KubeClient) checkStorageStatus(ctx context.Context, status *ClusterHealthStatus) error {
+	// Check PVCs
+	pvcList, err := k.Clientset.CoreV1().PersistentVolumeClaims("").List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, pvc := range pvcList.Items {
+		status.PVCStatus = append(status.PVCStatus, &PVCStatus{
+			Name:      pvc.Name,
+			Namespace: pvc.Namespace,
+			Status:    pvc.Status,
+			Spec:      pvc.Spec,
+		})
+	}
+
+	// Check StorageClasses
+	scList, err := k.Clientset.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	for _, sc := range scList.Items {
+		isDefault := false
+		if annotations := sc.GetAnnotations(); annotations != nil {
+			_, isDefault = annotations["storageclass.kubernetes.io/is-default-class"]
+		}
+		status.StorageClasses = append(status.StorageClasses, StorageClass{
+			Name:         sc.Name,
+			Provisioner:  sc.Provisioner,
+			DefaultClass: isDefault,
+		})
 	}
 
 	return nil

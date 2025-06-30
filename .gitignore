@@ -1,6 +1,10 @@
-# Binary
+# Binary files
 bin/
+dist/
 /ekspeek
+*.exe
+*.test
+*.prof
 
 # IDE files
 .idea/
