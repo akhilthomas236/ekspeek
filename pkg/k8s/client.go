@@ -8,6 +8,7 @@ import (
 	"encoding/pem"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -343,7 +344,19 @@ func (c *KubeClient) GetAPIServerCertificate(ctx context.Context) (*x509.Certifi
 		return nil, fmt.Errorf("API server URL is not HTTPS")
 	}
 
-	conn, err := tls.Dial("tcp", strings.TrimPrefix(host, "https://"), &tls.Config{
+	// Parse the host to get host and port
+	hostURL, err := url.Parse(host)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse API server URL: %w", err)
+	}
+
+	// If no port is specified, default to 443
+	hostAndPort := hostURL.Host
+	if !strings.Contains(hostAndPort, ":") {
+		hostAndPort = hostAndPort + ":443"
+	}
+
+	conn, err := tls.Dial("tcp", hostAndPort, &tls.Config{
 		InsecureSkipVerify: true,
 	})
 	if err != nil {
