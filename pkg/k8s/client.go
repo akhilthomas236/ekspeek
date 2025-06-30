@@ -5,8 +5,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -93,13 +95,21 @@ func UpdateKubeconfig(ctx context.Context, clusterName, region string) error {
 	// Create cluster entry
 	cluster := api.NewCluster()
 	cluster.Server = *result.Cluster.Endpoint
-	cluster.CertificateAuthorityData = []byte(*result.Cluster.CertificateAuthority.Data)
+	
+	// Properly handle certificate data
+	certData := *result.Cluster.CertificateAuthority.Data
+	// AWS returns base64 encoded data, no need to encode again
+	cluster.CertificateAuthorityData = []byte(certData)
 
 	// Create auth entry
 	authInfo := api.NewAuthInfo()
-	if token := os.Getenv("AWS_TOKEN"); token != "" {
-		authInfo.Token = token
+	
+	// Set token for aws-iam-authenticator
+	v1Token, err := generateV1Token(clusterName, cfg.Region)
+	if err != nil {
+		return fmt.Errorf("failed to generate token: %w", err)
 	}
+	authInfo.Token = v1Token
 
 	// Create context entry
 	context := api.NewContext()
@@ -464,4 +474,51 @@ func parseCertificate(certBytes []byte) (*x509.Certificate, error) {
 	}
 
 	return cert, nil
+}
+
+// generateV1Token generates a v1 token for authentication with EKS
+func generateV1Token(clusterName, region string) (string, error) {
+	// Execute aws-iam-authenticator to generate the token
+	cmd := exec.Command("aws-iam-authenticator", "token", "-i", clusterName, "--region", region)
+	output, err := cmd.Output()
+	if err != nil {
+		if _, ok := err.(*exec.ExitError); ok {
+			// Try using alternate method with AWS CLI if aws-iam-authenticator is not available
+			return generateTokenWithAWSCLI(clusterName, region)
+		}
+		return "", fmt.Errorf("failed to generate token: %w", err)
+	}
+
+	var tokenData struct {
+		Status struct {
+			Token string `json:"token"`
+		} `json:"status"`
+	}
+
+	if err := json.Unmarshal(output, &tokenData); err != nil {
+		return "", fmt.Errorf("failed to parse token output: %w", err)
+	}
+
+	return tokenData.Status.Token, nil
+}
+
+// generateTokenWithAWSCLI generates a token using the AWS CLI as fallback
+func generateTokenWithAWSCLI(clusterName, region string) (string, error) {
+	cmd := exec.Command("aws", "eks", "get-token", "--cluster-name", clusterName, "--region", region)
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to generate token with AWS CLI: %w", err)
+	}
+
+	var tokenData struct {
+		Status struct {
+			Token string `json:"token"`
+		} `json:"status"`
+	}
+
+	if err := json.Unmarshal(output, &tokenData); err != nil {
+		return "", fmt.Errorf("failed to parse AWS CLI token output: %w", err)
+	}
+
+	return tokenData.Status.Token, nil
 }
