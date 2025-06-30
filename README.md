@@ -178,14 +178,47 @@ Monitor and debug API throttling issues.
   - API latency
 - Example: `ekspeek debug throttling my-cluster`
 
-#### `ekspeek debug network [cluster-name]`
+#### `ekspeek debug network [cluster-name] [pod-name]`
 Debug networking configuration and connectivity.
-- Usage: `ekspeek debug network <cluster-name>`
+- Usage: `ekspeek debug network <cluster-name> <pod-name> [-n namespace]`
 - Checks:
-  - VPC configuration
+  - Pod network configuration
+  - VPC and subnet details
   - Security groups
   - Network policies
   - DNS resolution
+  - Pod connectivity tests
+- Example: 
+```bash
+$ ekspeek debug network my-cluster web-app-pod -n default
+
+Getting pod networking details...
+
+Pod Network Configuration:
+Pod IP: 10.0.15.123
+Host IP: 192.168.1.100
+Node: ip-192-168-1-100.ec2.internal
+
+Checking network policies...
+⚠️ No NetworkPolicies found in namespace default
+
+Testing DNS resolution...
+✅ DNS resolution test passed
+
+Getting VPC networking details...
+VPC Configuration:
+VPC ID: vpc-0abc123def456789
+Subnet ID: subnet-0123456789abcdef0
+Security Groups: [sg-0987654321fedcba]
+
+Testing pod connectivity...
+✅ Pod connectivity test passed
+
+Recommendations:
+1. Consider implementing NetworkPolicies to secure pod communication
+3. Pod is using host network - review if this is intended
+```
+The command performs comprehensive network diagnostics and provides actionable recommendations.
   - Load balancer configuration
 - Example: `ekspeek debug network my-cluster`
 
@@ -210,46 +243,157 @@ Debug cross-account access and permissions.
 
 #### `ekspeek debug tls [cluster-name]`
 Debug TLS certificates and configuration.
-- Usage: `ekspeek debug tls <cluster-name>`
+- Usage: `ekspeek debug tls <cluster-name> [-n namespace]`
 - Checks:
-  - Certificate validity
-  - Certificate chain
-  - TLS configuration
-  - Certificate expiration
-- Example: `ekspeek debug tls my-cluster`
+  - API server certificate
+  - Ingress TLS certificates
+  - Service certificates
+  - Certificate chains
+  - Expiration dates
+- Example:
+```bash
+$ ekspeek debug tls my-cluster
+
+Checking API server certificate...
+
+API Server Certificate:
+Subject: CN=kube-apiserver
+Issuer: CN=kubernetes
+Valid Until: 2025-07-30 10:15:30 UTC
+✅ API server certificate is valid for 89 more days
+
+Checking Ingress TLS certificates...
+Found 2 Ingress TLS certificates:
+
+Host: api.example.com
+Subject: CN=api.example.com
+Issuer: CN=Let's Encrypt Authority X3
+Valid Until: 2025-08-15 12:00:00 UTC
+✅ Certificate is valid for 45 more days
+
+Host: app.example.com
+Subject: CN=app.example.com
+Issuer: CN=Let's Encrypt Authority X3
+Valid Until: 2025-07-15 12:00:00 UTC
+❌ Certificate expires in 15 days
+
+Checking service certificates...
+Found 1 service TLS certificate:
+
+Service: payment-service
+Subject: CN=payment-service.default.svc
+Issuer: CN=service-ca
+Valid Until: 2025-09-30 00:00:00 UTC
+✅ Certificate is valid for 92 more days
+
+Validating certificate chains...
+✅ All certificate chains are valid
+
+Recommendations:
+1. Plan to rotate API server certificate within 89 days
+2. Renew certificate for app.example.com (expires in 15 days)
+```
+The command performs comprehensive certificate analysis and provides clear expiration warnings.
 
 #### `ekspeek debug performance [cluster-name]`
-Analyze cluster performance metrics.
-- Usage: `ekspeek debug performance <cluster-name>`
-- Checks:
-  - CPU utilization
-  - Memory usage
-  - Network performance
-  - Disk I/O
-  - API server latency
-- Example: `ekspeek debug performance my-cluster`
+Analyzes cluster performance metrics.
+- API server latency
+- etcd performance
+- Node resource utilization
+- Pod resource usage
+- Control plane metrics
 
 #### `ekspeek debug security [cluster-name]`
-Run security checks and compliance scans.
-- Usage: `ekspeek debug security <cluster-name>`
-- Checks:
-  - Pod security policies
-  - Network policies
-  - RBAC configuration
-  - Security context
-  - Container vulnerabilities
-- Example: `ekspeek debug security my-cluster`
+Performs security checks including:
+- RBAC configurations
+- Service account settings
+- Network policies
+- Pod security contexts
+- Cluster role bindings
+
+#### `ekspeek debug efs [cluster-name]`
+Diagnoses EFS CSI driver issues:
+- Driver pod status
+- Mount point verification
+- Volume status checks
+- Storage provisioning
+
+#### `ekspeek debug pvc [cluster-name]`
+Analyzes Persistent Volume Claims:
+- PVC status and events
+- Storage class configuration
+- Volume binding status
+- Capacity and usage
+
+#### `ekspeek debug pods [cluster-name]`
+Investigates pod-related issues:
+- Failed pod analysis
+- Container status
+- Resource constraints
+- Pod events and logs
+
+#### `ekspeek debug resources [cluster-name]`
+Shows cluster resource utilization:
+- Node capacity
+- Pod resource requests
+- Quota usage
+- Available resources
+
+#### `ekspeek debug irsa [cluster-name]`
+Debugs IAM Roles for Service Accounts:
+- IAM role validation
+- Service account configuration
+- Token mounting verification
+- Permission checks
+
+#### `ekspeek debug autoscaler [cluster-name]`
+Diagnoses Cluster Autoscaler issues:
+- Scaling events
+- Node group configuration
+- Scaling decisions
+- Resource requirements
+
+#### `ekspeek debug throttling [cluster-name]`
+Analyzes API throttling:
+- API call patterns
+- Rate limiting issues
+- Service quotas
+- Throttling metrics
+
+#### `ekspeek debug network [cluster-name] [pod-name]`
+Troubleshoots networking issues:
+- Pod connectivity
+- DNS resolution
+- Network policies
+- MTU configuration
+
+#### `ekspeek debug egress [cluster-name]`
+Analyzes pod egress traffic:
+- Security group rules
+- NAT gateway configuration
+- Routing tables
+- Outbound connectivity
+
+#### `ekspeek debug cross-account [cluster-name]`
+Debugs cross-account access issues:
+- IAM role trust relationships
+- VPC access
+- Security group permissions
+- Cross-account resources
+
+#### `ekspeek debug tls [cluster-name]`
+Validates TLS configurations:
+- Certificate validation
+- Expiration checks
+- Chain verification
+- TLS endpoints
 
 #### `ekspeek debug karpenter [cluster-name]`
-Debug Karpenter autoscaler configuration and behavior.
-- Usage: `ekspeek debug karpenter <cluster-name>`
-- Checks:
-  - Provisioner configuration
-  - Node templates
-  - Scaling decisions
-  - Node health
-  - Pending pods
-- Example: `ekspeek debug karpenter my-cluster`
+Troubleshoots Karpenter autoscaling:
+- Provisioner configuration
+- Node pool status
+- Scaling decisions
+- Pending pods
 
 ## Features
 
@@ -650,6 +794,52 @@ ekspeek debug performance my-cluster
 # Analyze resource usage
 ekspeek debug resources my-cluster
 ```
+
+## Command Safety
+
+All `ekspeek` commands are designed to be read-only operations, ensuring safe execution without any risk of modifying cluster state or resources. Here's how our commands operate:
+
+### Read-Only Operations
+
+All commands are limited to:
+- Reading configurations and status
+- Retrieving metrics and logs
+- Performing validation checks
+- Generating analysis reports
+- Providing recommendations
+
+### Command Categories
+
+1. **List and Describe Commands**
+   - `list clusters` - Reads cluster information
+   - `describe cluster` - Reads cluster details
+   - `list-nodegroups` - Reads nodegroup information
+   - `describe-nodegroup` - Reads nodegroup details
+
+2. **Debug Commands**
+   - `debug pods` - Reads pod status and logs
+   - `debug resources` - Reads cluster resource usage
+   - `debug efs` - Reads EFS CSI driver status
+   - `debug pvc` - Reads PVC status
+   - `debug irsa` - Validates IRSA configuration
+   - `debug autoscaler` - Reads autoscaler metrics and events
+   - `debug throttling` - Reads API throttling metrics
+   - `debug networking` - Reads network configuration
+   - `debug tls` - Validates certificates
+   - `debug performance` - Reads performance metrics
+   - `debug security` - Performs security audits
+   - `debug karpenter` - Reads Karpenter status
+
+3. **Health Commands**
+   - `health` - Reads cluster health metrics
+
+### Safety Guarantees
+
+- No create/update/delete operations on Kubernetes resources
+- No AWS API calls that modify resources
+- No write operations to cluster or infrastructure
+- All commands focus purely on diagnostics and analysis
+- Safe to use in production environments
 
 ## Contributing
 

@@ -19,21 +19,6 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-// KubeClient represents a Kubernetes client
-type KubeClient struct {
-	Clientset kubernetes.Interface
-}
-
-// NewKubeClient creates a new KubeClient
-func NewKubeClient(clientset kubernetes.Interface) (*KubeClient, error) {
-	if clientset == nil {
-		return nil, fmt.Errorf("kubernetes clientset cannot be nil")
-	}
-	return &KubeClient{
-		Clientset: clientset,
-	}, nil
-}
-
 // GetPodLogs retrieves logs for a specific pod
 func (k *KubeClient) GetPodLogs(ctx context.Context, namespace, podName, containerName string) (string, error) {
 	podLogOptions := corev1.PodLogOptions{
@@ -647,7 +632,10 @@ func CreateKubeClient() (*KubeClient, error) {
 		return nil, err
 	}
 
-	return NewKubeClient(clientset)
+	return &KubeClient{
+		Clientset: clientset,
+		Config:    config,
+	}, nil
 }
 
 // GetClusterAutoscalerPod returns the cluster-autoscaler pod
