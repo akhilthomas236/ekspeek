@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"encoding/json"
 	"fmt"
@@ -85,27 +86,37 @@ func UpdateKubeconfig(ctx context.Context, clusterName, region string) error {
 
 	// Get kubeconfig file path
 	kubeconfigPath := filepath.Join(os.Getenv("HOME"), ".kube", "config")
+	os.MkdirAll(filepath.Dir(kubeconfigPath), 0755)
 
 	// Load existing kubeconfig
 	kubeconfig, err := clientcmd.LoadFromFile(kubeconfigPath)
 	if err != nil {
-		kubeconfig = api.NewConfig()
+		if os.IsNotExist(err) {
+			kubeconfig = api.NewConfig()
+		} else {
+			return fmt.Errorf("failed to load kubeconfig: %w", err)
+		}
 	}
 
 	// Create cluster entry
 	cluster := api.NewCluster()
 	cluster.Server = *result.Cluster.Endpoint
-	
+
 	// Properly handle certificate data
 	certData := *result.Cluster.CertificateAuthority.Data
-	// AWS returns base64 encoded data, no need to encode again
-	cluster.CertificateAuthorityData = []byte(certData)
+	decodedCert, err := base64.StdEncoding.DecodeString(certData)
+	if err != nil {
+		// If not base64 encoded, use as is
+		cluster.CertificateAuthorityData = []byte(certData)
+	} else {
+		cluster.CertificateAuthorityData = decodedCert
+	}
 
 	// Create auth entry
 	authInfo := api.NewAuthInfo()
 	
 	// Set token for aws-iam-authenticator
-	v1Token, err := generateV1Token(clusterName, cfg.Region)
+	v1Token, err := generateV1Token(clusterName, region)
 	if err != nil {
 		return fmt.Errorf("failed to generate token: %w", err)
 	}
@@ -115,6 +126,7 @@ func UpdateKubeconfig(ctx context.Context, clusterName, region string) error {
 	context := api.NewContext()
 	context.Cluster = clusterName
 	context.AuthInfo = clusterName
+	context.Namespace = "default"
 
 	// Add to kubeconfig
 	kubeconfig.Clusters[clusterName] = cluster
@@ -463,27 +475,59 @@ func validateCertChain(cert *x509.Certificate) error {
 }
 
 func parseCertificate(certBytes []byte) (*x509.Certificate, error) {
-	block, _ := pem.Decode(certBytes)
-	if block == nil {
-		return nil, fmt.Errorf("failed to decode PEM block")
+	if len(certBytes) == 0 {
+		return nil, fmt.Errorf("empty certificate data")
 	}
 
-	cert, err := x509.ParseCertificate(block.Bytes)
+	// Try direct parsing first
+	cert, err := x509.ParseCertificate(certBytes)
+	if err == nil {
+		return cert, nil
+	}
+
+	// Try PEM decoding
+	block, _ := pem.Decode(certBytes)
+	if block == nil {
+		// Try base64 decoding
+		decoded, err := base64.StdEncoding.DecodeString(string(certBytes))
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode certificate: not a valid PEM or base64 format")
+		}
+		// Try parsing the base64 decoded data
+		cert, err = x509.ParseCertificate(decoded)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse certificate after base64 decode: %w", err)
+		}
+		return cert, nil
+	}
+
+	// Parse the PEM-decoded certificate
+	cert, err = x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse certificate: %w", err)
+		return nil, fmt.Errorf("failed to parse certificate from PEM: %w", err)
 	}
 
 	return cert, nil
 }
 
+// isCommandNotFound checks if the error is due to command not being found in PATH
+func isCommandNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "executable file not found") ||
+		strings.Contains(err.Error(), "not found in $PATH") ||
+		strings.Contains(err.Error(), "no such file or directory")
+}
+
 // generateV1Token generates a v1 token for authentication with EKS
 func generateV1Token(clusterName, region string) (string, error) {
-	// Execute aws-iam-authenticator to generate the token
+	// First try using aws-iam-authenticator
 	cmd := exec.Command("aws-iam-authenticator", "token", "-i", clusterName, "--region", region)
 	output, err := cmd.Output()
 	if err != nil {
-		if _, ok := err.(*exec.ExitError); ok {
-			// Try using alternate method with AWS CLI if aws-iam-authenticator is not available
+		// If command not found or execution error, try AWS CLI
+		if _, ok := err.(*exec.ExitError); ok || isCommandNotFound(err) {
 			return generateTokenWithAWSCLI(clusterName, region)
 		}
 		return "", fmt.Errorf("failed to generate token: %w", err)
@@ -507,6 +551,9 @@ func generateTokenWithAWSCLI(clusterName, region string) (string, error) {
 	cmd := exec.Command("aws", "eks", "get-token", "--cluster-name", clusterName, "--region", region)
 	output, err := cmd.Output()
 	if err != nil {
+		if isCommandNotFound(err) {
+			return "", fmt.Errorf("neither aws-iam-authenticator nor AWS CLI found in PATH. Please install one of them")
+		}
 		return "", fmt.Errorf("failed to generate token with AWS CLI: %w", err)
 	}
 
